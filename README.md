@@ -1,11 +1,11 @@
 <!-- title: jsstrip Read Me -->
-<!-- $Id: README.md,v 1.7 2024-08-30 19:22:32-04 ron Exp $ -->
+<!-- $Id: README.md,v 1.8 2024-08-31 09:59:42-04 ron Exp $ -->
 
 # jsstrip
 
-jsstrip is a Python program that removes whitespace and comments from
+jsstrip is a Python script that removes whitespace and comments from
 a JavaScript source code file. It writes its output to standard output.
-jsstrip often saves 30-40% of space in its input. jsstrip requires
+jsstrip often reduces the size of its input by 30-40%. jsstrip requires
 Python 3.6 or later.
 
 jsstrip can be convenient if you wish to distribute an HTML file with its
