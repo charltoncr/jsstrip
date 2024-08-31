@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 #
-# $Id: jsstrip,v 2.18 2024-08-31 07:43:37-04 ron Exp $
+# $Id: jsstrip,v 2.19 2024-08-31 14:16:58-04 ron Exp $
 
 ##
 # jsstrip
@@ -81,7 +81,7 @@ import re
 import sys
 import textwrap
 
-_RCSID = '$Id: jsstrip,v 2.18 2024-08-31 07:43:37-04 ron Exp $'
+_RCSID = '$Id: jsstrip,v 2.19 2024-08-31 14:16:58-04 ron Exp $'
 
 _a, _v, _d  = _RCSID.split()[1:4]
 appName = re.split('[,.]+', _a)[0] # handle macOS & Windows RCS name formats
@@ -202,7 +202,7 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
                         j += 1
                         continue
                 break
-            j += 1  # move past closing backtick
+            j += 1  # include closing backtick
             bt = s[i:j]
             cnt = bt.count('\n')
             line += cnt     # for debug use
@@ -287,7 +287,7 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
                         j += 1
                         continue
                 break
-            j += 1  # move past closing double quote
+            j += 1  # include closing double quote
             dq = s[i:j]
             cnt = dq.count('\n')
             line += cnt     # for debug use
@@ -314,7 +314,7 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
                         j += 1
                         continue
                 break
-            j += 1  # move past closing double quote
+            j += 1  # include closing double quote
             sq = s[i:j]
             cnt = sq.count('\n')
             line += cnt     # for debug use
