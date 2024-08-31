@@ -1,0 +1,476 @@
+#!/usr/bin/python3
+# -*- coding: utf-8 -*-
+#
+# $Id: jsstrip,v 2.18 2024-08-31 07:43:37-04 ron Exp $
+
+##
+# jsstrip
+# Removes comments and optional whitespace from javascript files.
+#
+# jsstrip requires Python 3.6 or later.
+#
+# From https://code.google.com/p/jsstrip/. Download link thereon is dead
+# as of 2024-08-03.  Wayback Machine has no copy later than 25-Mar-2007.
+#
+# 2024-08-26 Ron Charlton.
+#   Added -c/--copyright flag.
+#
+# 2024-08-05 Ron Charlton.
+#   Removed option -b.
+#   Backtick-quoted strings now have literal linefeeds converted to r'\n'.
+#
+# 2024-08-02 Ron Charlton.
+#   Added option -b to keep newlines in backtick-quoted strings.  jsstrip now
+#   normally changes newlines to spaces therein.
+#
+# 2024-08-01 Ron Charlton.
+#   Made jsstrip.py into ~/bin/jsstrip.  Made it convert multiline backtick-quoted
+#   strings into singleline backtick-quoted strings.
+#
+# 03-Jun-2012
+#   Retrieved from web on 2012-06-03 by Ron Charlton.
+#   Modified by RonC:
+#   Added these comments and added warning about ; to displayed help.
+#   detab -n8 jsstrip.py     so Cython will compile it.
+#
+#
+# 25-Mar-2007
+#   remove a few extra spots of whitespace
+#   fix exception handling
+#   do not strip MSIE conditional comments
+#   remove MS-DOS newlines (\r)
+#   when saving single-comments, remove ending whitespace
+#
+# 01-Mar-2007
+#   import into http://code.google.com/p/jsstrip/
+#   no changes
+#
+# version 1.03
+# 10-Aug-2006 Fix command-line args bug with -q and -quiet
+#  No change to javascript output
+# Thanks to Mark Johnson
+#
+# version 1.02
+# 25-May-2006 the ? operator doesn't need spaces either
+#     x ? 1 : 0  ==> x?1:0
+#
+# version 1.0.1
+# 24-Apr-2006 (removed some debug)
+#
+# version 1.0
+# 25-Mar-2006 (initial)
+#
+# http://modp.com/release/jsstrip/
+#
+# send bugs, features, comments to
+#
+# nickg
+#      @
+#       modp.com
+#
+# The above email address is no longer valid.  Google searches for 'jsstrip'
+# return nothing relevant.  Send bugs, feature, comments to
+#
+#    Ron
+#       @
+#        RonCharlton.org
+##
+
+import getopt
+import re
+import sys
+import textwrap
+
+_RCSID = '$Id: jsstrip,v 2.18 2024-08-31 07:43:37-04 ron Exp $'
+
+_a, _v, _d  = _RCSID.split()[1:4]
+appName = re.split('[,.]+', _a)[0] # handle macOS & Windows RCS name formats
+__author__  = 'Nick Galbreath, Ron Charlton'
+__license__ = 'BSD 3-clause license'
+__date__    = _d.replace('/', '-')
+__version__ = _v
+__since__   = '2006-03-25'
+
+__all__ = ['main', 'strip']
+
+# require Python version 3.6 or later (for f format strings)
+_need_ver = (3, 6)
+if sys.version_info < _need_ver:
+    sys_ver = sys.version.split()[0]
+    sys.exit('%s requires Python version %d.%d or later;\n'
+             'Your Python version is %s.\n'
+             '' % (appName, _need_ver[0], _need_ver[1], sys_ver))
+
+
+_copyright = '''The BSD License
+https://opensource.org/license/bsd-3-clause
+
+Copyright © 2024 Ron Charlton
+Copyright (c) 2005, 2006, 2007 Nick Galbreath
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+
+ * Redistributions of source code must retain the above copyright
+   notice,
+ * Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+ * Neither the name of the modp.com nor the names of its
+   contributors may be used to endorse or promote products derived from
+   this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.'''
+
+#
+# TBD: should I add module stuff around debugOn/Off and strip?
+# --nickg
+
+#
+# Handy debug script
+#
+def debugOn(s):
+    sys.stderr.write(f'{s}\n')
+
+def debugOff(s):
+    pass
+
+def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, debug=debugOff):
+    result = []   # result array.  gets joined at end
+    i = 0         # char index for input string
+    j = 0         # char forward index for input string
+    slen = len(s) # size of input string
+    line = 1      # line number of file (close to it anyways)
+
+    #
+    # whitespace characters
+    #
+    whitespace = ' \n\r\t'
+
+    #
+    # items that don't need spaces next to them
+    #
+    chars = '^&|!+-*/%=?:;,{}()<>% \t\n\r\'"[]`'
+
+    while i < slen:
+        # skip all "boring" characters.  This is either
+        # reserved word (e.g. "for", "else", "if") or a
+        # variable/object/method (e.g. "foo.color")
+        j = i
+        while j < slen and chars.find(s[j]) == -1:
+            j += 1
+        if i != j:
+            token = s[i:j]
+            result.append(token)
+            i = j
+
+        if i >= slen:
+            # last line was unterminated with ";"
+            # might want to either throw an exception
+            # or print a warning message
+            break
+
+        ch = s[i]
+
+        # backtick-quoted singleline/multiline strings (`...`) '\n' --> r'\n'
+        if ch == '`':
+            j = i + 1
+            while True:
+                if j < slen:
+                    j = s.find('`', j)
+                if j >= slen or j == -1:
+                    sys.exit(f'{appName}: Reached EOF with no closing "`" to '
+                        f'match the one opened at line {line}.')
+                if s[j-1] == '\\':
+                    # odd number of \ means ` is escaped
+                    m = j - 1
+                    while m > i and s[m] == '\\':
+                        m -= 1
+                    if (j-1-m) & 1:
+                        j += 1
+                        continue
+                break
+            j += 1  # move past closing backtick
+            bt = s[i:j]
+            cnt = bt.count('\n')
+            line += cnt     # for debug use
+            debug(f'BTQUOTE: {cnt} linefeeds')
+            result.append(bt.replace('\n', r'\n'))
+            i = j
+            continue
+
+        # multiline comments
+        if ch == '/' and i+1 < slen and s[i+1] == '*':
+            keepMSIE = i+2 < slen and s[i+2] == '@' # M$ IE conditional comment
+            endC = s.find('*/', i+2)
+            if endC == -1:
+                sys.exit(f'{appName}: Found unterminated /*..*/ comment, '
+                        f'opened at line {line}.')
+            endC += 2
+            comment = s[i:endC]
+            if (optSaveFirst and line == 1) or (not optMulti) or keepMSIE:
+                result.append(f'{comment}\n')
+            line += comment.count('\n')    # count linefeeds for debugging
+            i = endC
+            continue
+
+        # singleline comments
+        if ch == '/' and i+1 < slen and s[i+1] == '/':
+            endC = s.find('\n', i+2)
+            nextC = endC
+            if endC == -1:
+                endC = slen - 1
+                nextC = slen
+            else:
+                # rewind and remove any "\r" or trailing whitespace IN the comment
+                # e.g. "//foo   " --> "//foo"
+                while whitespace.find(s[endC]) != -1:
+                    endC -= 1
+
+            # save only if it's the VERY first thing in the file and optSaveFirst is on
+            # or if we are saving all // comments
+            # or if it's an MSIE conditional comment
+            if (optSaveFirst and line == 1 and i == 0) or not optSingle or (
+                    i+2 < slen and s[i+2] == '@'):
+                result.append(f'{s[i:endC+1]}\n')
+            i = nextC
+            continue
+
+        # tricky.  might be an RE
+        if ch == '/':
+            # rewind, skip white space
+            j = 1
+            while s[i-j] == ' ': j += 1
+            debug(f"REGEXP: {j} backup found '{s[i-j]}'")
+            if s[i-j] == '=' or s[i-j] == '(':
+                # yes, this is an re
+                # now move forward and find the end of it
+                j = 1
+                while s[i+j] != '/':
+                    while s[i+j] != '\\' and s[i+j] != '/':
+                        j += 1
+                    if s[i+j] == '\\':
+                        j += 2
+                result.append(s[i:i+j+1])
+                debug(f"REGEXP: {s[i:i+j+1]}")
+                i += j + 1
+                debug(f"REGEXP: now at {ch}")
+                continue
+
+        #double quote strings
+        if ch == '"':
+            j = i + 1
+            while True:
+                if j < slen:
+                    j = s.find('"', j)
+                if j >= slen or j == -1:
+                    sys.exit(f'{appName}: Reached EOF with no closing " to '
+                        f'match the one opened at line {line}.')
+                if s[j-1] == '\\':
+                    # odd number of \ means " is escaped
+                    m = j - 1
+                    while m > i and s[m] == '\\':
+                        m -= 1
+                    if (j-1-m) & 1:
+                        j += 1
+                        continue
+                break
+            j += 1  # move past closing double quote
+            dq = s[i:j]
+            cnt = dq.count('\n')
+            line += cnt     # for debug use
+            debug(f'DQUOTE: {dq}')
+            result.append(dq)
+            i = j
+            continue
+
+        #single quote strings
+        if ch == "'":
+            j = i + 1
+            while True:
+                if j < slen:
+                    j = s.find("'", j)
+                if j >= slen or j == -1:
+                    sys.exit(f"{appName}: Reached EOF with no closing ' to "
+                        f"match the one opened at line {line}.")
+                if s[j-1] == '\\':
+                    # odd number of \ means ' is escaped
+                    m = j - 1
+                    while m > i and s[m] == '\\':
+                        m -= 1
+                    if (j-1-m) & 1:
+                        j += 1
+                        continue
+                break
+            j += 1  # move past closing double quote
+            sq = s[i:j]
+            cnt = sq.count('\n')
+            line += cnt     # for debug use
+            debug(f'SQUOTE: {sq}')
+            result.append(sq)
+            i = j
+            continue
+
+        # newlines
+        # this is just for error and debugging output
+        if ch == '\n':
+            debug(f"LINE: {line}")
+            line += 1
+
+        if optWhite and whitespace.find(ch) != -1:
+            # leading spaces
+            if i+1 < slen and chars.find(s[i+1]) != -1:
+                i += 1
+                continue
+            # trailing spaces
+            # if this ch is space AND the last char processed
+            # is special, then skip the space
+            if len(result) and len(result[-1]) and chars.find(result[-1][-1]) != -1:
+                i += 1
+                continue
+            # else after all of this convert the "whitespace" to
+            # a single space.  It will get appended below
+            ch = ' '
+
+        result.append(ch)
+        i += 1
+
+    # remove last space, it might have been added by mistake at the end
+    if len(result) > 0 and len(result[-1]) and whitespace.find(result[-1]) != -1:
+        result.pop()
+
+    debug(f'Number of lines processed: {line}')
+
+    return ''.join(result)
+
+#----------------
+# everything below here is just for command line arg processing
+#----------------
+
+def _showVersion():
+    """Show version info."""
+    sys.stdout.write(textwrap.dedent(f"""\
+        Name:    {appName}
+        Version: {__version__}
+        Date:    {__date__}
+        Author:  {__author__}
+        License: {__license__}.  See '{appName} -c'.
+        """))
+    sys.exit(0)
+
+
+def _usage():
+    foo= f"""\
+Usage: {appName} [flags] [infile] [> outfile]
+
+{appName} removes white space and comments from javascript files.
+
+IT ASSUMES LINES END WITH ";".  Use jslint (JavaScript Lint) to make sure.
+
+With no 'infile' {appName} reads from stdin.
+
+By default, the first comment block is saved since it normally contains
+author, copyright or licensing information.  Using "-f" overrides this.
+
+{appName} replaces each linefeed character in backtick-quoted strings with
+a literal \\n.
+
+Flags:
+
+  -h -? --help    Show this page
+  -v --version    Show version/date/author/license info
+  -c --copyright  Show {appName}'s copyright
+  -f --first      Do not save first comment
+  -w --white      Do not strip white space
+  -s --single     Do not strip single line comments //
+  -m --multi      Do not strip multi line comments /* ... */
+  -q --quiet      Do not print statistics at end of run
+  -d --debug      Print debugging messages
+  -n --nop        Do not print/save result
+"""
+    sys.stdout.write(foo)
+
+def main(argv):
+    OPT_DEBUG = False
+    OPT_QUIET = False
+    OPT_WHITE = True
+    OPT_SINGLE = True
+    OPT_MULTI = True
+    OPT_FIRST = True
+    OPT_DEBUG = debugOff
+    OPT_NOP = False
+
+    argsShort="d?hcmwfsnqv"
+    argsLong=['debug', 'nop', 'help', 'single', 'multi', 'white', 'first',
+            'quiet', 'version']
+    try:
+        opts, args = getopt.getopt(argv, argsShort, argsLong)
+    except getopt.GetoptError:
+        _usage()
+        sys.exit(2)
+    for opt,arg in opts:
+        if opt in ("-?", "-h", "--help"):
+            _usage()
+            sys.exit(0)
+        elif opt in ("-v", "--version"):
+            _showVersion()
+        elif opt in ("-c", "--copyright"):
+            print(_copyright)
+            sys.exit(0)
+        elif opt in ("-d", "--debug"):
+            OPT_DEBUG=debugOn
+        elif opt in ("-s", "--single"):
+            OPT_SINGLE = False
+        elif opt in ("-m", "--multi"):
+            OPT_MULTI = False
+        elif opt in ("-w", "--white"):
+            OPT_WHITE = False
+        elif opt in ("-f", "--first"):
+            OPT_FIRST = False
+        elif opt in ("-q", "--quiet"):
+            OPT_QUIET = True
+        elif opt in ("-n", "--nop"):
+            OPT_NOP = True
+
+    f = sys.stdin
+    s = ''
+
+    if len(args) == 1:
+        try:
+            with open(args[0], "rt") as f:
+                s = f.read()
+        except Exception as ex:
+            sys.stderr.write(f'{appName}: error opening "{args[0]}": {ex}\n')
+            return
+    else:
+        # read all of it
+        s = f.read()
+
+    s = s.replace('\r\n', '\n')
+
+    snew = strip(s, OPT_FIRST, OPT_WHITE, OPT_SINGLE, OPT_MULTI, OPT_DEBUG)
+
+    if not OPT_NOP:
+        print(snew)
+
+    if not OPT_QUIET:
+        L = len(snew)
+        slen = len(s)
+        if slen:
+            sys.stderr.write(f"In: {slen}, Out: {L}"
+                f", Savings: {(100.0 * (1.0 - float(L)/slen)):.2f}%\n")
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
