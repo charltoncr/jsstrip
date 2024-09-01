@@ -1,29 +1,30 @@
 <!-- title: jsstrip Read Me -->
-<!-- $Id: README.md,v 1.9 2024-08-31 11:52:52-04 ron Exp $ -->
+<!-- $Id: README.md,v 1.12 2024-09-01 09:08:14-04 ron Exp $ -->
 
 # jsstrip
 
 jsstrip is a Python script that removes whitespace and comments from
 a JavaScript source code file. It writes its output to standard output.
-jsstrip often reduces the size of its input by 30-40%, reducing
+jsstrip often reduces the size of its input by 30-40%, reducing script
 download time by the same amount. jsstrip requires Python 3.6 or later.
 
 jsstrip can be convenient if you wish to distribute an HTML file with its
 JavaScript source code within it on one or two lines surrounded by
-`<script></script>`.
+<br>`<script>`<br>`</script>`
 
 With no flags jsstrip will convert a JavaScript file into two lines:
-one will be a comment started on the first line; the other line will be
-the entire JavaScript file minus unneeded whitespace and comments.
+one will be a comment started on the first line
+of the JavaScript file; the other line will be
+the entire JavaScript file without unneeded whitespace and comments.
 
 ## Installation
 
 Put jsstrip in your executable search path and change its mode to execute:
-`chmod 755 jsstrip`. If you are using a system that doesn't understand
+`chmod 755 jsstrip`. If you are using a system that won't run
 a script whose first line is
 `#!/usr/bin/python3` then change the name from `jsstrip` to `jsstrip.py`.
-Then run it as `python3 jsstrip.py [args]`
-or perhaps `py jsstrip.py [args]`.
+Then run it as `python3 jsstrip.py [args]`
+or perhaps `py jsstrip.py [args]`.
 
 ## Help
 
@@ -59,13 +60,13 @@ Flags:
 
 ## Examples
 
-```sh
+```bash
 $ jsstrip myfile.js > myfileCompressed.js
 
 $ jsstrip -dn myfile.js
 ```
 
-```batch
+```
 c:\>python3 jsstrip.py myfile.js > myfileCompressed.js
 
 c:\>python3 jsstrip.py -dn myfile.js
