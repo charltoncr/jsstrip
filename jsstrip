@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 #
-# $Id: jsstrip,v 2.19 2024-08-31 14:16:58-04 ron Exp $
+# $Id: jsstrip,v 2.26 2024-09-03 15:40:44-04 ron Exp $
 
 ##
 # jsstrip
@@ -68,8 +68,8 @@
 #      @
 #       modp.com
 #
-# The above email address is no longer valid.  Google searches for 'jsstrip'
-# return nothing relevant.  Send bugs, feature, comments to
+# The above email address and domain are no longer valid.  A Google search
+# for 'jsstrip' return nothing relevant.  Send bugs, features, comments to
 #
 #    Ron
 #       @
@@ -81,7 +81,7 @@ import re
 import sys
 import textwrap
 
-_RCSID = '$Id: jsstrip,v 2.19 2024-08-31 14:16:58-04 ron Exp $'
+_RCSID = '$Id: jsstrip,v 2.26 2024-09-03 15:40:44-04 ron Exp $'
 
 _a, _v, _d  = _RCSID.split()[1:4]
 appName = re.split('[,.]+', _a)[0] # handle macOS & Windows RCS name formats
@@ -102,11 +102,12 @@ if sys.version_info < _need_ver:
              '' % (appName, _need_ver[0], _need_ver[1], sys_ver))
 
 
-_copyright = '''The BSD License
-https://opensource.org/license/bsd-3-clause
-
+_copyright = '''\
 Copyright © 2024 Ron Charlton
 Copyright (c) 2005, 2006, 2007 Nick Galbreath
+
+The BSD License
+https://opensource.org/license/bsd-3-clause
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions
@@ -152,7 +153,7 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
     i = 0         # char index for input string
     j = 0         # char forward index for input string
     slen = len(s) # size of input string
-    line = 1      # line number of file (close to it anyways)
+    line = 1      # line number of JS file (close to it anyways)
 
     #
     # whitespace characters
@@ -177,9 +178,16 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
             i = j
 
         if i >= slen:
-            # last line was unterminated with ";"
+            # Last line was unterminated with ";"
             # might want to either throw an exception
-            # or print a warning message
+            # or print a warning message.
+            # The 'if' logic doesn't work if 
+            #       whenReady(restart)
+            # is the last line. If the last line is
+            #       whenReady(restart) k
+            # it works.
+            sys.exit(f'{appName}: Missing ; on last line at line {line}.')
+            # NOT REACHED.  (break was in old source code too, but no sys.exit)
             break
 
         ch = s[i]
@@ -210,64 +218,6 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
             result.append(bt.replace('\n', r'\n'))
             i = j
             continue
-
-        # multiline comments
-        if ch == '/' and i+1 < slen and s[i+1] == '*':
-            keepMSIE = i+2 < slen and s[i+2] == '@' # M$ IE conditional comment
-            endC = s.find('*/', i+2)
-            if endC == -1:
-                sys.exit(f'{appName}: Found unterminated /*..*/ comment, '
-                        f'opened at line {line}.')
-            endC += 2
-            comment = s[i:endC]
-            if (optSaveFirst and line == 1) or (not optMulti) or keepMSIE:
-                result.append(f'{comment}\n')
-            line += comment.count('\n')    # count linefeeds for debugging
-            i = endC
-            continue
-
-        # singleline comments
-        if ch == '/' and i+1 < slen and s[i+1] == '/':
-            endC = s.find('\n', i+2)
-            nextC = endC
-            if endC == -1:
-                endC = slen - 1
-                nextC = slen
-            else:
-                # rewind and remove any "\r" or trailing whitespace IN the comment
-                # e.g. "//foo   " --> "//foo"
-                while whitespace.find(s[endC]) != -1:
-                    endC -= 1
-
-            # save only if it's the VERY first thing in the file and optSaveFirst is on
-            # or if we are saving all // comments
-            # or if it's an MSIE conditional comment
-            if (optSaveFirst and line == 1 and i == 0) or not optSingle or (
-                    i+2 < slen and s[i+2] == '@'):
-                result.append(f'{s[i:endC+1]}\n')
-            i = nextC
-            continue
-
-        # tricky.  might be an RE
-        if ch == '/':
-            # rewind, skip white space
-            j = 1
-            while s[i-j] == ' ': j += 1
-            debug(f"REGEXP: {j} backup found '{s[i-j]}'")
-            if s[i-j] == '=' or s[i-j] == '(':
-                # yes, this is an re
-                # now move forward and find the end of it
-                j = 1
-                while s[i+j] != '/':
-                    while s[i+j] != '\\' and s[i+j] != '/':
-                        j += 1
-                    if s[i+j] == '\\':
-                        j += 2
-                result.append(s[i:i+j+1])
-                debug(f"REGEXP: {s[i:i+j+1]}")
-                i += j + 1
-                debug(f"REGEXP: now at {ch}")
-                continue
 
         #double quote strings
         if ch == '"':
@@ -320,6 +270,76 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
             line += cnt     # for debug use
             debug(f'SQUOTE: {sq}')
             result.append(sq)
+            i = j
+            continue
+
+        # multiline comments
+        if ch == '/' and i+1 < slen and s[i+1] == '*':
+            keepMSIE = i+2 < slen and s[i+2] == '@' # M$ IE conditional comment
+            endC = s.find('*/', i+2)
+            if endC == -1:
+                sys.exit(f'{appName}: Found unterminated /*..*/ comment, '
+                        f'opened at line {line}.')
+            endC += 2
+            comment = s[i:endC]
+            if (optSaveFirst and line == 1) or (not optMulti) or keepMSIE:
+                result.append(f'{comment}\n')
+            line += comment.count('\n')    # count linefeeds for debugging
+            i = endC
+            continue
+
+        # tricky.  might be an RE
+        if ch == '/':
+            # rewind, skip white space
+            j = 1
+            while i-j >= 0 and s[i-j] == ' ':
+                j += 1
+            debug(f"REGEXP: {j} backup found '{s[i-j]}'")
+            if r'=\('.find(s[i-j]) != -1:
+                # yes, this is an re
+                # now move forward and find the end of it
+                j = i + 1
+                while True:
+                    if j < slen:
+                        j = s.find('/', j)
+                    if j >= slen or j == -1:
+                        sys.exit(f'{appName}: Reached EOF with no closing regexp '
+                            f'/ started at line {line}.')
+                    if j-1 >= 0 and s[j-1] == '\\':
+                        # odd number of \ means / is escaped
+                        m = j - 1
+                        while m > i and s[m] == '\\':
+                            m -= 1
+                        if (j-1-m) & 1:
+                            j += 1
+                            continue
+                    break
+                j += 1  # include closing /
+                result.append(s[i:j])
+                debug(f"REGEXP: {s[i:j]}")
+                i = j
+                debug(f"REGEXP: now at {s[i]}")
+                continue
+
+        # singleline comments
+        if ch == '/' and i+1 < slen and s[i+1] == '/':
+            j = s.find('\n', i+2)
+            if j == -1:
+                j = slen
+            else:
+                j += 1
+            # rewind and remove any "\r" or trailing whitespace IN the comment
+            # e.g. "//foo   " --> "//foo"
+            m = j - 1
+            while m >= 0 and whitespace.find(s[m]) != -1:
+                m -= 1
+            # save only if it's the VERY first thing in the file and optSaveFirst is on
+            # or if we are saving all // comments
+            # or if it's an MSIE conditional comment
+            if (optSaveFirst and line == 1 and i == 0) or not optSingle or (
+                    i+2 < slen and s[i+2] == '@'):
+                result.append(f'{s[i:m+1]}\n')
+            debug(f'SLINECOMMENT: {s[i:m+1]}\n')
             i = j
             continue
 
@@ -377,7 +397,8 @@ Usage: {appName} [flags] [infile] [> outfile]
 
 {appName} removes white space and comments from javascript files.
 
-IT ASSUMES LINES END WITH ";".  Use jslint (JavaScript Lint) to make sure.
+IT ASSUMES LINES END WITH A SEMICOLON (;).  Use jslint (JavaScript Lint)
+to make sure.
 
 With no 'infile' {appName} reads from stdin.
 
@@ -391,7 +412,7 @@ Flags:
 
   -h -? --help    Show this page
   -v --version    Show version/date/author/license info
-  -c --copyright  Show {appName}'s copyright
+  -c --copyright  Show {appName}'s copyright and license
   -f --first      Do not save first comment
   -w --white      Do not strip white space
   -s --single     Do not strip single line comments //
@@ -401,6 +422,7 @@ Flags:
   -n --nop        Do not print/save result
 """
     sys.stdout.write(foo)
+
 
 def main(argv):
     OPT_DEBUG = False
@@ -471,6 +493,7 @@ def main(argv):
         if slen:
             sys.stderr.write(f"In: {slen}, Out: {L}"
                 f", Savings: {(100.0 * (1.0 - float(L)/slen)):.2f}%\n")
+
 
 if __name__ == "__main__":
     main(sys.argv[1:])
