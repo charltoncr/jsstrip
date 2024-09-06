@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 #
-# $Id: jsstrip,v 2.26 2024-09-03 15:40:44-04 ron Exp $
+# $Id: jsstrip,v 2.35 2024-09-06 16:19:11-04 ron Exp $
 
 ##
 # jsstrip
@@ -39,7 +39,7 @@
 #   fix exception handling
 #   do not strip MSIE conditional comments
 #   remove MS-DOS newlines (\r)
-#   when saving single-comments, remove ending whitespace
+#   when saving singleline comments, remove ending whitespace
 #
 # 01-Mar-2007
 #   import into http://code.google.com/p/jsstrip/
@@ -81,7 +81,7 @@ import re
 import sys
 import textwrap
 
-_RCSID = '$Id: jsstrip,v 2.26 2024-09-03 15:40:44-04 ron Exp $'
+_RCSID = '$Id: jsstrip,v 2.35 2024-09-06 16:19:11-04 ron Exp $'
 
 _a, _v, _d  = _RCSID.split()[1:4]
 appName = re.split('[,.]+', _a)[0] # handle macOS & Windows RCS name formats
@@ -136,24 +136,24 @@ ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.'''
 
 #
-# TBD: should I add module stuff around debugOn/Off and strip?
+# TBD: should I add module stuff around debugOn/Off and 'def strip(s, ...)'?
 # --nickg
 
 #
 # Handy debug script
 #
-def debugOn(s):
+def _debugOn(s):
     sys.stderr.write(f'{s}\n')
 
-def debugOff(s):
+def _debugOff(s):
     pass
 
-def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, debug=debugOff):
+def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, debug=_debugOff):
     result = []   # result array.  gets joined at end
     i = 0         # char index for input string
     j = 0         # char forward index for input string
     slen = len(s) # size of input string
-    line = 1      # line number of JS file (close to it anyways)
+    line = 2      # Yes, 2.  line number of JS file (close to it anyways)
 
     #
     # whitespace characters
@@ -166,11 +166,11 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
     chars = '^&|!+-*/%=?:;,{}()<>% \t\n\r\'"[]`'
 
     while i < slen:
-        # skip all "boring" characters.  This is either
+        # Skip all "boring" characters.  This is either
         # reserved word (e.g. "for", "else", "if") or a
         # variable/object/method (e.g. "foo.color")
         j = i
-        while j < slen and chars.find(s[j]) == -1:
+        while j < slen and chars.find(s[j]) == -1: # stop when char is found
             j += 1
         if i != j:
             token = s[i:j]
@@ -181,11 +181,11 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
             # Last line was unterminated with ";"
             # might want to either throw an exception
             # or print a warning message.
-            # The 'if' logic doesn't work if 
+            # The 'if' logic doesn't work if
             #       whenReady(restart)
-            # is the last line. If the last line is
+            # is the last line. It works if the last line is
             #       whenReady(restart) k
-            # it works.
+
             sys.exit(f'{appName}: Missing ; on last line at line {line}.')
             # NOT REACHED.  (break was in old source code too, but no sys.exit)
             break
@@ -239,8 +239,7 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
                 break
             j += 1  # include closing double quote
             dq = s[i:j]
-            cnt = dq.count('\n')
-            line += cnt     # for debug use
+            line += dq.count('\n')  # for debug use
             debug(f'DQUOTE: {dq}')
             result.append(dq)
             i = j
@@ -266,8 +265,7 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
                 break
             j += 1  # include closing double quote
             sq = s[i:j]
-            cnt = sq.count('\n')
-            line += cnt     # for debug use
+            line += sq.count('\n')  # for debug use
             debug(f'SQUOTE: {sq}')
             result.append(sq)
             i = j
@@ -290,13 +288,14 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
 
         # tricky.  might be an RE
         if ch == '/':
-            # rewind, skip white space
+            # rewind to skip white space
             j = 1
-            while i-j >= 0 and s[i-j] == ' ':
+            while i-j > 0 and s[i-j] == ' ':
                 j += 1
-            debug(f"REGEXP: {j} backup found '{s[i-j]}'")
-            if r'=\('.find(s[i-j]) != -1:
-                # yes, this is an re
+            debug(f"REGEXP: backup by {j} found '{s[i-j]}'")
+            # the next line looks like an iffy way to detect an RE
+            if r'=\(&|'.find(s[i-j]) != -1:
+                # yes, this is an RE
                 # now move forward and find the end of it
                 j = i + 1
                 while True:
@@ -305,7 +304,7 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
                     if j >= slen or j == -1:
                         sys.exit(f'{appName}: Reached EOF with no closing regexp '
                             f'/ started at line {line}.')
-                    if j-1 >= 0 and s[j-1] == '\\':
+                    if j > 0 and s[j-1] == '\\':
                         # odd number of \ means / is escaped
                         m = j - 1
                         while m > i and s[m] == '\\':
@@ -315,8 +314,10 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
                             continue
                     break
                 j += 1  # include closing /
-                result.append(s[i:j])
-                debug(f"REGEXP: {s[i:j]}")
+                RE = s[i:j]
+                line += RE.count('\n') # shouldn't happen
+                result.append(RE)
+                debug(f"REGEXP: {RE}")
                 i = j
                 debug(f"REGEXP: now at {s[i]}")
                 continue
@@ -327,27 +328,29 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
             if j == -1:
                 j = slen
             else:
+                line += 1
                 j += 1
             # rewind and remove any "\r" or trailing whitespace IN the comment
             # e.g. "//foo   " --> "//foo"
             m = j - 1
             while m >= 0 and whitespace.find(s[m]) != -1:
                 m -= 1
+            slc = s[i:m+1]
+            debug(f'SLINECOMMENT: {slc}\n')
             # save only if it's the VERY first thing in the file and optSaveFirst is on
             # or if we are saving all // comments
             # or if it's an MSIE conditional comment
             if (optSaveFirst and line == 1 and i == 0) or not optSingle or (
                     i+2 < slen and s[i+2] == '@'):
-                result.append(f'{s[i:m+1]}\n')
-            debug(f'SLINECOMMENT: {s[i:m+1]}\n')
+                result.append(f'{slc}\n')
             i = j
             continue
 
         # newlines
         # this is just for error and debugging output
-        if ch == '\n':
-            debug(f"LINE: {line}")
+        if s[i] == '\n':
             line += 1
+            debug(f"LINE: {line}")
 
         if optWhite and whitespace.find(ch) != -1:
             # leading spaces
@@ -431,7 +434,7 @@ def main(argv):
     OPT_SINGLE = True
     OPT_MULTI = True
     OPT_FIRST = True
-    OPT_DEBUG = debugOff
+    OPT_DEBUG = _debugOff
     OPT_NOP = False
 
     argsShort="d?hcmwfsnqv"
@@ -452,7 +455,7 @@ def main(argv):
             print(_copyright)
             sys.exit(0)
         elif opt in ("-d", "--debug"):
-            OPT_DEBUG=debugOn
+            OPT_DEBUG=_debugOn
         elif opt in ("-s", "--single"):
             OPT_SINGLE = False
         elif opt in ("-m", "--multi"):
@@ -490,10 +493,10 @@ def main(argv):
     if not OPT_QUIET:
         L = len(snew)
         slen = len(s)
+        sys.stderr.write(f"In: {slen:,.0f}; Out: {L:,.0f}")
         if slen:
-            sys.stderr.write(f"In: {slen}, Out: {L}"
-                f", Savings: {(100.0 * (1.0 - float(L)/slen)):.2f}%\n")
-
+            sys.stderr.write(f"; Savings: {(100.0 * (1.0 - float(L)/slen)):.2f}%")
+        sys.stderr.write('\n')
 
 if __name__ == "__main__":
     main(sys.argv[1:])
