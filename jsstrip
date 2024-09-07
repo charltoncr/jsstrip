@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 #
-# $Id: jsstrip,v 2.35 2024-09-06 16:19:11-04 ron Exp $
+# $Id: jsstrip,v 2.39 2024-09-07 16:03:30-04 ron Exp $
 
 ##
 # jsstrip
@@ -81,7 +81,7 @@ import re
 import sys
 import textwrap
 
-_RCSID = '$Id: jsstrip,v 2.35 2024-09-06 16:19:11-04 ron Exp $'
+_RCSID = '$Id: jsstrip,v 2.39 2024-09-07 16:03:30-04 ron Exp $'
 
 _a, _v, _d  = _RCSID.split()[1:4]
 appName = re.split('[,.]+', _a)[0] # handle macOS & Windows RCS name formats
@@ -153,8 +153,8 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
     i = 0         # char index for input string
     j = 0         # char forward index for input string
     slen = len(s) # size of input string
-    line = 2      # Yes, 2.  line number of JS file (close to it anyways)
-
+    line = 1      # line number of JS file (close to it anyways)
+    firstLine = True
     #
     # whitespace characters
     #
@@ -186,7 +186,7 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
             # is the last line. It works if the last line is
             #       whenReady(restart) k
 
-            sys.exit(f'{appName}: Missing ; on last line at line {line}.')
+            sys.exit(f'{appName}: Missing trailing ";" at line {line}.')
             # NOT REACHED.  (break was in old source code too, but no sys.exit)
             break
 
@@ -280,13 +280,13 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
                         f'opened at line {line}.')
             endC += 2
             comment = s[i:endC]
-            if (optSaveFirst and line == 1) or (not optMulti) or keepMSIE:
+            if (optSaveFirst and firstLine and i == 0) or (not optMulti) or keepMSIE:
                 result.append(f'{comment}\n')
             line += comment.count('\n')    # count linefeeds for debugging
             i = endC
             continue
 
-        # tricky.  might be an RE
+        # tricky.  might be an RE (this code must be before // comment code)
         if ch == '/':
             # rewind to skip white space
             j = 1
@@ -340,7 +340,7 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
             # save only if it's the VERY first thing in the file and optSaveFirst is on
             # or if we are saving all // comments
             # or if it's an MSIE conditional comment
-            if (optSaveFirst and line == 1 and i == 0) or not optSingle or (
+            if (optSaveFirst and firstLine and i == 0) or not optSingle or (
                     i+2 < slen and s[i+2] == '@'):
                 result.append(f'{slc}\n')
             i = j
@@ -349,6 +349,7 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
         # newlines
         # this is just for error and debugging output
         if s[i] == '\n':
+            firstLine = False
             line += 1
             debug(f"LINE: {line}")
 
