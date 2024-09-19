@@ -1,5 +1,5 @@
 <!-- title: jsstrip Read Me -->
-<!-- $Id: README.md,v 1.12 2024-09-01 09:08:14-04 ron Exp $ -->
+<!-- $Id: README.md,v 1.13 2024-09-19 09:11:29-04 ron Exp $ -->
 
 # jsstrip
 
@@ -14,7 +14,7 @@ JavaScript source code within it on one or two lines surrounded by
 
 With no flags jsstrip will convert a JavaScript file into two lines:
 one (or more) will be a comment block started on the first line
-of the JavaScript file; the other will be the entire JavaScript file
+of the JavaScript file; the other line will be the entire JavaScript file
 without comments and unneeded whitespace.
 
 ## Installation
@@ -32,7 +32,7 @@ Then run it as `python3 jsstrip.py [args]` or perhaps
 $ jsstrip --help
 Usage: jsstrip [flags] [infile] [> outfile]
 
-jsstrip removes white space and comments from javascript files.
+jsstrip removes white space and comments from a javascript file.
 
 IT ASSUMES LINES END WITH ";".  Use jslint (JavaScript Lint) to make sure.
 

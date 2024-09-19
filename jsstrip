@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 #
-# $Id: jsstrip,v 2.39 2024-09-07 16:03:30-04 ron Exp $
+# $Id: jsstrip,v 2.60 2024-09-19 09:10:54-04 ron Exp $
 
 ##
 # jsstrip
@@ -12,12 +12,13 @@
 # From https://code.google.com/p/jsstrip/. Download link thereon is dead
 # as of 2024-08-03.  Wayback Machine has no copy later than 25-Mar-2007.
 #
+#
 # 2024-08-26 Ron Charlton.
 #   Added -c/--copyright flag.
 #
 # 2024-08-05 Ron Charlton.
 #   Removed option -b.
-#   Backtick-quoted strings now have literal linefeeds converted to r'\n'.
+#   Backtick-quoted strings now have literal linefeeds changed to r'\n'.
 #
 # 2024-08-02 Ron Charlton.
 #   Added option -b to keep newlines in backtick-quoted strings.  jsstrip now
@@ -81,7 +82,7 @@ import re
 import sys
 import textwrap
 
-_RCSID = '$Id: jsstrip,v 2.39 2024-09-07 16:03:30-04 ron Exp $'
+_RCSID = '$Id: jsstrip,v 2.60 2024-09-19 09:10:54-04 ron Exp $'
 
 _a, _v, _d  = _RCSID.split()[1:4]
 appName = re.split('[,.]+', _a)[0] # handle macOS & Windows RCS name formats
@@ -93,7 +94,7 @@ __since__   = '2006-03-25'
 
 __all__ = ['main', 'strip']
 
-# require Python version 3.6 or later (for f format strings)
+# require Python version 3.6 or later (for f'' format strings)
 _need_ver = (3, 6)
 if sys.version_info < _need_ver:
     sys_ver = sys.version.split()[0]
@@ -154,7 +155,6 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
     j = 0         # char forward index for input string
     slen = len(s) # size of input string
     line = 1      # line number of JS file (close to it anyways)
-    firstLine = True
     #
     # whitespace characters
     #
@@ -165,10 +165,20 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
     #
     chars = '^&|!+-*/%=?:;,{}()<>% \t\n\r\'"[]`'
 
+
+    # If the first line starts with #! then append the entire line to result:
+    # It is an instruction to the shell to pass the rest of the file to
+    # a JavaScript interpreter/compiler named in that first line.
+    m = re.match('#!.*?\n', s)  # NOT r''
+    if m is not None:
+        result.append(m.group(0))
+        i = m.end(0)
+        line += 1
+
     while i < slen:
-        # Skip all "boring" characters.  This is either
+        # Skip all "boring" characters.  This is either a
         # reserved word (e.g. "for", "else", "if") or a
-        # variable/object/method (e.g. "foo.color")
+        # variable/object/method (e.g. "foo.color").
         j = i
         while j < slen and chars.find(s[j]) == -1: # stop when char is found
             j += 1
@@ -178,12 +188,12 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
             i = j
 
         if i >= slen:
-            # Last line was unterminated with ";"
+            # Last line was unterminated with ";",
             # might want to either throw an exception
             # or print a warning message.
-            # The 'if' logic doesn't work if
+            # The 'if' logic above doesn't work if the last line is
             #       whenReady(restart)
-            # is the last line. It works if the last line is
+            # It works if the last line is
             #       whenReady(restart) k
 
             sys.exit(f'{appName}: Missing trailing ";" at line {line}.')
@@ -192,7 +202,7 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
 
         ch = s[i]
 
-        # backtick-quoted singleline/multiline strings (`...`) '\n' --> r'\n'
+        # backtick-quoted singleline/multiline strings (`...`)  '\n' --> r'\n'
         if ch == '`':
             j = i + 1
             while True:
@@ -201,12 +211,12 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
                 if j >= slen or j == -1:
                     sys.exit(f'{appName}: Reached EOF with no closing "`" to '
                         f'match the one opened at line {line}.')
-                if s[j-1] == '\\':
+                k = j - 1
+                if s[k] == '\\':  # (k is >= 0)
                     # odd number of \ means ` is escaped
-                    m = j - 1
-                    while m > i and s[m] == '\\':
-                        m -= 1
-                    if (j-1-m) & 1:
+                    while k > i and s[k] == '\\':
+                        k -= 1
+                    if (j-1-k) & 1:
                         j += 1
                         continue
                 break
@@ -219,7 +229,7 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
             i = j
             continue
 
-        #double quote strings
+        # double quote strings
         if ch == '"':
             j = i + 1
             while True:
@@ -228,12 +238,12 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
                 if j >= slen or j == -1:
                     sys.exit(f'{appName}: Reached EOF with no closing " to '
                         f'match the one opened at line {line}.')
-                if s[j-1] == '\\':
+                k = j - 1
+                if s[k] == '\\':  # (k is >= 0)
                     # odd number of \ means " is escaped
-                    m = j - 1
-                    while m > i and s[m] == '\\':
-                        m -= 1
-                    if (j-1-m) & 1:
+                    while k > i and s[k] == '\\':
+                        k -= 1
+                    if (j-1-k) & 1:
                         j += 1
                         continue
                 break
@@ -244,8 +254,8 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
             result.append(dq)
             i = j
             continue
-
-        #single quote strings
+        
+        # single quote strings
         if ch == "'":
             j = i + 1
             while True:
@@ -254,16 +264,16 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
                 if j >= slen or j == -1:
                     sys.exit(f"{appName}: Reached EOF with no closing ' to "
                         f"match the one opened at line {line}.")
-                if s[j-1] == '\\':
+                k = j - 1
+                if s[k] == '\\':  # (k is >= 0)
                     # odd number of \ means ' is escaped
-                    m = j - 1
-                    while m > i and s[m] == '\\':
-                        m -= 1
-                    if (j-1-m) & 1:
+                    while k > i and s[k] == '\\':
+                        k -= 1
+                    if (j-1-k) & 1:
                         j += 1
                         continue
                 break
-            j += 1  # include closing double quote
+            j += 1  # include closing single quote
             sq = s[i:j]
             line += sq.count('\n')  # for debug use
             debug(f'SQUOTE: {sq}')
@@ -280,13 +290,18 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
                         f'opened at line {line}.')
             endC += 2
             comment = s[i:endC]
-            if (optSaveFirst and firstLine and i == 0) or (not optMulti) or keepMSIE:
-                result.append(f'{comment}\n')
+            if (optSaveFirst and i == 0) or (not optMulti) or keepMSIE:
+                result.append(f'{comment}')
+            if optSaveFirst and i == 0:
+                result.append('\n')
             line += comment.count('\n')    # count linefeeds for debugging
             i = endC
             continue
 
         # tricky.  might be an RE (this code must be before // comment code)
+        # REs cannot be detected with another RE.  Would need JavaScript to
+        # try to compile it to be sure.  This is a Python program and thus
+        # cannot test an RE with a JavaScript RE compiler.
         if ch == '/':
             # rewind to skip white space
             j = 1
@@ -294,36 +309,39 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
                 j += 1
             debug(f"REGEXP: backup by {j} found '{s[i-j]}'")
             # the next line looks like an iffy way to detect an RE
-            if r'=\(&|'.find(s[i-j]) != -1:
-                # yes, this is an RE
-                # now move forward and find the end of it
+            if r'=(&|'.find(s[i-j]) != -1:
+                # yes, this is an RE, now move forward and find the end of it
                 j = i + 1
                 while True:
                     if j < slen:
                         j = s.find('/', j)
                     if j >= slen or j == -1:
-                        sys.exit(f'{appName}: Reached EOF with no closing regexp '
-                            f'/ started at line {line}.')
-                    if j > 0 and s[j-1] == '\\':
+                        sys.exit(f'{appName}: Reached EOF with no regexp '
+                            f'closing / started at line {line}.')
+                    k = j - 1
+                    if s[k] == '\\':  # (k is >= 0)
                         # odd number of \ means / is escaped
-                        m = j - 1
-                        while m > i and s[m] == '\\':
-                            m -= 1
-                        if (j-1-m) & 1:
+                        while k > i and s[k] == '\\':
+                            k -= 1
+                        if (j-1-k) & 1:
                             j += 1
                             continue
                     break
-                j += 1  # include closing /
-                RE = s[i:j]
-                line += RE.count('\n') # shouldn't happen
-                result.append(RE)
-                debug(f"REGEXP: {RE}")
-                i = j
-                debug(f"REGEXP: now at {s[i]}")
-                continue
+                # If the if below is true, this cannot be a // comment, but it
+                # could be two separate division signs.
+                if j-i > 1:
+                    j += 1      # include closing /
+                    RE = s[i:j]
+                    line += RE.count('\n') # should be 0?
+                    result.append(RE)
+                    debug(f"REGEXP: {RE}")
+                    i = j
+                    debug(f"REGEXP: now at {s[i]}")
+                    continue
 
         # singleline comments
-        if ch == '/' and i+1 < slen and s[i+1] == '/':
+        if (ch == '/' and i+1 < slen and s[i+1] == '/'
+                and (i == 0 or s[i-1] != '\\')):
             j = s.find('\n', i+2)
             if j == -1:
                 j = slen
@@ -332,15 +350,15 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
                 j += 1
             # rewind and remove any "\r" or trailing whitespace IN the comment
             # e.g. "//foo   " --> "//foo"
-            m = j - 1
-            while m >= 0 and whitespace.find(s[m]) != -1:
-                m -= 1
-            slc = s[i:m+1]
+            k = j - 1
+            while k >= 0 and whitespace.find(s[k]) != -1:
+                k -= 1
+            slc = s[i:k+1]
             debug(f'SLINECOMMENT: {slc}\n')
             # save only if it's the VERY first thing in the file and optSaveFirst is on
             # or if we are saving all // comments
             # or if it's an MSIE conditional comment
-            if (optSaveFirst and firstLine and i == 0) or not optSingle or (
+            if (optSaveFirst and i == 0) or not optSingle or (
                     i+2 < slen and s[i+2] == '@'):
                 result.append(f'{slc}\n')
             i = j
@@ -349,7 +367,6 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
         # newlines
         # this is just for error and debugging output
         if s[i] == '\n':
-            firstLine = False
             line += 1
             debug(f"LINE: {line}")
 
@@ -396,13 +413,14 @@ def _showVersion():
 
 
 def _usage():
+    """Show usage (help) info."""
     foo= f"""\
 Usage: {appName} [flags] [infile] [> outfile]
 
-{appName} removes white space and comments from javascript files.
+{appName} removes white space and comments from a javascript file.
 
 IT ASSUMES LINES END WITH A SEMICOLON (;).  Use jslint (JavaScript Lint)
-to make sure.
+or www.jslint.com to make sure.
 
 With no 'infile' {appName} reads from stdin.
 
@@ -494,7 +512,7 @@ def main(argv):
     if not OPT_QUIET:
         L = len(snew)
         slen = len(s)
-        sys.stderr.write(f"In: {slen:,.0f}; Out: {L:,.0f}")
+        sys.stderr.write(f"In: {slen:,.0f}; Out: {L+1:,.0f}")   # +1: linefeed
         if slen:
             sys.stderr.write(f"; Savings: {(100.0 * (1.0 - float(L)/slen)):.2f}%")
         sys.stderr.write('\n')
