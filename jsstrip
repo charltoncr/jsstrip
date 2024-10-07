@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 #
-# $Id: jsstrip,v 2.60 2024-09-19 09:10:54-04 ron Exp $
+# $Id: jsstrip,v 2.72 2024-10-07 12:56:23-04 ron Exp $
 
 ##
 # jsstrip
@@ -82,7 +82,7 @@ import re
 import sys
 import textwrap
 
-_RCSID = '$Id: jsstrip,v 2.60 2024-09-19 09:10:54-04 ron Exp $'
+_RCSID = '$Id: jsstrip,v 2.72 2024-10-07 12:56:23-04 ron Exp $'
 
 _a, _v, _d  = _RCSID.split()[1:4]
 appName = re.split('[,.]+', _a)[0] # handle macOS & Windows RCS name formats
@@ -150,7 +150,7 @@ def _debugOff(s):
     pass
 
 def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, debug=_debugOff):
-    result = []   # result array.  gets joined at end
+    result = []   # result list.  gets joined at end
     i = 0         # char index for input string
     j = 0         # char forward index for input string
     slen = len(s) # size of input string
@@ -166,14 +166,14 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
     chars = '^&|!+-*/%=?:;,{}()<>% \t\n\r\'"[]`'
 
 
-    # If the first line starts with #! then append the entire line to result:
+    # If the first line begins with #! then append the entire line to result:
     # It is an instruction to the shell to pass the rest of the file to
     # a JavaScript interpreter/compiler named in that first line.
     m = re.match('#!.*?\n', s)  # NOT r''
     if m is not None:
         result.append(m.group(0))
         i = m.end(0)
-        line += 1
+        line += 1     # for debug use
 
     while i < slen:
         # Skip all "boring" characters.  This is either a
@@ -202,82 +202,35 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
 
         ch = s[i]
 
-        # backtick-quoted singleline/multiline strings (`...`)  '\n' --> r'\n'
-        if ch == '`':
-            j = i + 1
-            while True:
-                if j < slen:
-                    j = s.find('`', j)
-                if j >= slen or j == -1:
-                    sys.exit(f'{appName}: Reached EOF with no closing "`" to '
-                        f'match the one opened at line {line}.')
-                k = j - 1
-                if s[k] == '\\':  # (k is >= 0)
-                    # odd number of \ means ` is escaped
-                    while k > i and s[k] == '\\':
-                        k -= 1
-                    if (j-1-k) & 1:
-                        j += 1
-                        continue
-                break
-            j += 1  # include closing backtick
-            bt = s[i:j]
-            cnt = bt.count('\n')
-            line += cnt     # for debug use
-            debug(f'BTQUOTE: {cnt} linefeeds')
-            result.append(bt.replace('\n', r'\n'))
-            i = j
-            continue
-
+        # grave accent strings (`...`)  '\n' --> r'\n'
         # double quote strings
-        if ch == '"':
-            j = i + 1
-            while True:
-                if j < slen:
-                    j = s.find('"', j)
-                if j >= slen or j == -1:
-                    sys.exit(f'{appName}: Reached EOF with no closing " to '
-                        f'match the one opened at line {line}.')
-                k = j - 1
-                if s[k] == '\\':  # (k is >= 0)
-                    # odd number of \ means " is escaped
-                    while k > i and s[k] == '\\':
-                        k -= 1
-                    if (j-1-k) & 1:
-                        j += 1
-                        continue
-                break
-            j += 1  # include closing double quote
-            dq = s[i:j]
-            line += dq.count('\n')  # for debug use
-            debug(f'DQUOTE: {dq}')
-            result.append(dq)
-            i = j
-            continue
-        
         # single quote strings
-        if ch == "'":
+        if ch in '`"\'':
             j = i + 1
             while True:
                 if j < slen:
-                    j = s.find("'", j)
+                    j = s.find(ch, j)
                 if j >= slen or j == -1:
-                    sys.exit(f"{appName}: Reached EOF with no closing ' to "
-                        f"match the one opened at line {line}.")
+                    sys.exit(f'{appName}: Reached EOF with no closing {ch} '
+                    f'to match the one opened at line {line}.')
                 k = j - 1
                 if s[k] == '\\':  # (k is >= 0)
-                    # odd number of \ means ' is escaped
+                    # odd number of \ means ch is escaped
                     while k > i and s[k] == '\\':
                         k -= 1
                     if (j-1-k) & 1:
                         j += 1
                         continue
                 break
-            j += 1  # include closing single quote
-            sq = s[i:j]
-            line += sq.count('\n')  # for debug use
-            debug(f'SQUOTE: {sq}')
-            result.append(sq)
+            j += 1  # include closing ch
+            token = s[i:j]
+            line += token.count('\n')   # for debug use
+            if ch == '`' and optWhite:
+                token = token.replace('\n', r'\n')
+            type = ('SQUOTE' if ch == "'" else
+                    ('DQUOTE' if ch == '"' else 'GAQUOTE'))
+            debug(f'{type}: {token}')
+            result.append(token)
             i = j
             continue
 
