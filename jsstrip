@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 #
-# $Id: jsstrip,v 2.72 2024-10-07 12:56:23-04 ron Exp $
+# $Id: jsstrip,v 2.74 2024-10-07 14:13:41-04 ron Exp $
 
 ##
 # jsstrip
@@ -82,7 +82,7 @@ import re
 import sys
 import textwrap
 
-_RCSID = '$Id: jsstrip,v 2.72 2024-10-07 12:56:23-04 ron Exp $'
+_RCSID = '$Id: jsstrip,v 2.74 2024-10-07 14:13:41-04 ron Exp $'
 
 _a, _v, _d  = _RCSID.split()[1:4]
 appName = re.split('[,.]+', _a)[0] # handle macOS & Windows RCS name formats
@@ -202,10 +202,10 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
 
         ch = s[i]
 
-        # grave accent strings (`...`)  '\n' --> r'\n'
         # double quote strings
         # single quote strings
-        if ch in '`"\'':
+        # grave accent strings (`...`)    '\n' --> r'\n'
+        if ch in '"\'`':
             j = i + 1
             while True:
                 if j < slen:
@@ -224,11 +224,11 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
                 break
             j += 1  # include closing ch
             token = s[i:j]
-            line += token.count('\n')   # for debug use
+            line += token.count('\n')   # for debug & error reporting use
             if ch == '`' and optWhite:
                 token = token.replace('\n', r'\n')
-            type = ('SQUOTE' if ch == "'" else
-                    ('DQUOTE' if ch == '"' else 'GAQUOTE'))
+            type = ('DQUOTE' if ch == '"' else
+                    ('SQUOTE' if ch == "'" else 'GAQUOTE'))
             debug(f'{type}: {token}')
             result.append(token)
             i = j
