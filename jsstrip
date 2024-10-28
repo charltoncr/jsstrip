@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 #
-# $Id: jsstrip,v 2.74 2024-10-07 14:13:41-04 ron Exp $
+# $Id: jsstrip,v 3.15 2024-10-28 08:23:08-04 ron Exp $
 
 ##
 # jsstrip
@@ -82,7 +82,7 @@ import re
 import sys
 import textwrap
 
-_RCSID = '$Id: jsstrip,v 2.74 2024-10-07 14:13:41-04 ron Exp $'
+_RCSID = '$Id: jsstrip,v 3.15 2024-10-28 08:23:08-04 ron Exp $'
 
 _a, _v, _d  = _RCSID.split()[1:4]
 appName = re.split('[,.]+', _a)[0] # handle macOS & Windows RCS name formats
@@ -149,6 +149,7 @@ def _debugOn(s):
 def _debugOff(s):
     pass
 
+
 def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, debug=_debugOff):
     result = []   # result list.  gets joined at end
     i = 0         # char index for input string
@@ -167,7 +168,7 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
 
 
     # If the first line begins with #! then append the entire line to result:
-    # It is an instruction to the shell to pass the rest of the file to
+    # The line is an instruction to the shell to pass the rest of the file to
     # a JavaScript interpreter/compiler named in that first line.
     m = re.match('#!.*?\n', s)  # NOT r''
     if m is not None:
@@ -180,7 +181,7 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
         # reserved word (e.g. "for", "else", "if") or a
         # variable/object/method (e.g. "foo.color").
         j = i
-        while j < slen and chars.find(s[j]) == -1: # stop when char is found
+        while j < slen and s[j] not in chars:
             j += 1
         if i != j:
             token = s[i:j]
@@ -197,15 +198,14 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
             #       whenReady(restart) k
 
             sys.exit(f'{appName}: Missing trailing ";" at line {line}.')
-            # NOT REACHED.  (break was in old source code too, but no sys.exit)
-            break
+            # NOT REACHED.  (break was in old source code, but no sys.exit)
 
         ch = s[i]
 
-        # double quote strings
-        # single quote strings
-        # grave accent strings (`...`)    '\n' --> r'\n'
-        if ch in '"\'`':
+        # single quote strings  '...'
+        # double quote strings  "..."
+        # grave accent strings  `...`    ('\n' --> r'\n')
+        if ch in '\'"`':
             j = i + 1
             while True:
                 if j < slen:
@@ -224,12 +224,12 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
                 break
             j += 1  # include closing ch
             token = s[i:j]
-            line += token.count('\n')   # for debug & error reporting use
+            line += token.count('\n')   # for debug & error reporting
             if ch == '`' and optWhite:
                 token = token.replace('\n', r'\n')
-            type = ('DQUOTE' if ch == '"' else
-                    ('SQUOTE' if ch == "'" else 'GAQUOTE'))
-            debug(f'{type}: {token}')
+            t = ('SQUOTE' if ch == '\'' else
+                    ('DQUOTE' if ch == '"' else 'GAQUOTE'))
+            debug(f'{t}: {token}')
             result.append(token)
             i = j
             continue
@@ -237,24 +237,26 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
         # multiline comments
         if ch == '/' and i+1 < slen and s[i+1] == '*':
             keepMSIE = i+2 < slen and s[i+2] == '@' # M$ IE conditional comment
-            endC = s.find('*/', i+2)
-            if endC == -1:
+            j = s.find('*/', i+2)
+            if j == -1:
                 sys.exit(f'{appName}: Found unterminated /*..*/ comment, '
                         f'opened at line {line}.')
-            endC += 2
-            comment = s[i:endC]
+            j += 2
+            comment = s[i:j]
             if (optSaveFirst and i == 0) or (not optMulti) or keepMSIE:
                 result.append(f'{comment}')
             if optSaveFirst and i == 0:
                 result.append('\n')
             line += comment.count('\n')    # count linefeeds for debugging
-            i = endC
+            i = j
             continue
 
-        # tricky.  might be an RE (this code must be before // comment code)
+        # Tricky.  Might be an RE (this code must be before // comment code).
         # REs cannot be detected with another RE.  Would need JavaScript to
         # try to compile it to be sure.  This is a Python program and thus
         # cannot test an RE with a JavaScript RE compiler.
+        # At https://github.com/acornjs/acorn/blob/master/acorn/src/regexp.js
+        # is JavaScript-based JavaScript RE parser.  It's 1,382 lines long.
         if ch == '/':
             # rewind to skip white space
             j = 1
@@ -262,7 +264,7 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
                 j += 1
             debug(f"REGEXP: backup by {j} found '{s[i-j]}'")
             # the next line looks like an iffy way to detect an RE
-            if r'=(&|'.find(s[i-j]) != -1:
+            if s[i-j] in r'=(&|':
                 # yes, this is an RE, now move forward and find the end of it
                 j = i + 1
                 while True:
@@ -280,8 +282,8 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
                             j += 1
                             continue
                     break
-                # If the if below is true, this cannot be a // comment, but it
-                # could be two separate division signs.
+                # When the if below is true, this cannot be a // comment, but
+                # it could be two separate division signs.
                 if j-i > 1:
                     j += 1      # include closing /
                     RE = s[i:j]
@@ -295,6 +297,7 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
         # singleline comments
         if (ch == '/' and i+1 < slen and s[i+1] == '/'
                 and (i == 0 or s[i-1] != '\\')):
+            keepMSIE = i+2 < slen and s[i+2] == '@' # is it M$ Internet Explorer cmd?
             j = s.find('\n', i+2)
             if j == -1:
                 j = slen
@@ -304,46 +307,46 @@ def strip(s, optSaveFirst=True, optWhite=True, optSingle=True, optMulti=True, de
             # rewind and remove any "\r" or trailing whitespace IN the comment
             # e.g. "//foo   " --> "//foo"
             k = j - 1
-            while k >= 0 and whitespace.find(s[k]) != -1:
+            while k >= 0 and s[k] in whitespace:
                 k -= 1
             slc = s[i:k+1]
             debug(f'SLINECOMMENT: {slc}\n')
             # save only if it's the VERY first thing in the file and optSaveFirst is on
             # or if we are saving all // comments
             # or if it's an MSIE conditional comment
-            if (optSaveFirst and i == 0) or not optSingle or (
-                    i+2 < slen and s[i+2] == '@'):
+            if (optSaveFirst and i == 0) or (not optSingle) or keepMSIE:
                 result.append(f'{slc}\n')
             i = j
             continue
 
         # newlines
-        # this is just for error and debugging output
-        if s[i] == '\n':
+        # this is only for error and debugging output
+        if ch == '\n':
             line += 1
             debug(f"LINE: {line}")
 
-        if optWhite and whitespace.find(ch) != -1:
+        if ch in whitespace and optWhite:
             # leading spaces
-            if i+1 < slen and chars.find(s[i+1]) != -1:
-                i += 1
-                continue
+            omitLeading = i+1 < slen and s[i+1] in chars
             # trailing spaces
             # if this ch is space AND the last char processed
-            # is special, then skip the space
-            if len(result) and len(result[-1]) and chars.find(result[-1][-1]) != -1:
+            # is special, then skip the space in ch
+            omitTrailing = len(result) == 0 or (
+                    len(result[-1]) > 0 and result[-1][-1] in chars)
+            if omitLeading or omitTrailing:
                 i += 1
                 continue
-            # else after all of this convert the "whitespace" to
-            # a single space.  It will get appended below
+            # else convert the whitespace to a single space.
+            # It will be appended below.
             ch = ' '
 
         result.append(ch)
         i += 1
 
     # remove last space, it might have been added by mistake at the end
-    if len(result) > 0 and len(result[-1]) and whitespace.find(result[-1]) != -1:
-        result.pop()
+    if len(result) > 0 and len(result[-1]) == 1:
+        if result[-1][0] in whitespace:
+            result.pop()
 
     debug(f'Number of lines processed: {line}')
 
@@ -365,8 +368,8 @@ def _showVersion():
     sys.exit(0)
 
 
-def _usage():
-    """Show usage (help) info."""
+def _help():
+    """Show help info."""
     foo= f"""\
 Usage: {appName} [flags] [infile] [> outfile]
 
@@ -415,11 +418,11 @@ def main(argv):
     try:
         opts, args = getopt.getopt(argv, argsShort, argsLong)
     except getopt.GetoptError:
-        _usage()
+        _help()
         sys.exit(2)
-    for opt,arg in opts:
+    for opt, _ in opts:
         if opt in ("-?", "-h", "--help"):
-            _usage()
+            _help()
             sys.exit(0)
         elif opt in ("-v", "--version"):
             _showVersion()
